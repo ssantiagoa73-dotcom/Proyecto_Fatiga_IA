@@ -23,7 +23,7 @@ Proyecto de visión artificial y machine learning para detectar fatiga, distracc
 
 ## Resultados
 
-Accuracy del modelo: 96%
+Precisión del modelo: 96%
 
 ## Ejecución
 
