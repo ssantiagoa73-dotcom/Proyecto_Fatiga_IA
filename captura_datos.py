@@ -354,43 +354,62 @@ while True:
                 cabeza_estaba_abajo = False
                 tiempo_inicio_cabeza_abajo = None
 
-        # Parpadeo / microsueño
-        ojos_cerrados = ear < umbral_ear_personal
+        # --------------------------------------------------------------------
+        # Deteccion de parpadeos y microsueños
+        # --------------------------------------------------------------------
+        
+        ojos_cerrados = ear < umbral_ear_personal                                   # Verificaar si los ojos están cerrados usando el EAR personalizado.
 
-        if ojos_cerrados and not mirando_abajo and not en_calibracion:
+        if ojos_cerrados and not mirando_abajo and not en_calibracion:              # Solo analiza ojos si no se mira abajo y ya termino la calibración.      
             frames_ojos_cerrados += 1
         else:
-            if FRAMES_MIN_PARPADEO <= frames_ojos_cerrados <= FRAMES_MAX_PARPADEO:
+            if FRAMES_MIN_PARPADEO <= frames_ojos_cerrados <= FRAMES_MAX_PARPADEO:  # Verifica si el cierre de ojos corresponde a un parpadeo válido.
                 contador_parpadeos += 1
                 tiempos_parpadeos.append(ahora)
 
-            elif frames_ojos_cerrados >= FRAMES_MICROSUENO:
+            elif frames_ojos_cerrados >= FRAMES_MICROSUENO:                         # Verifica si el cierre prolongado corresponde a microsueño.                                                  
                 contador_microsuenos += 1
 
             frames_ojos_cerrados = 0
 
-        if not mirando_abajo and not en_calibracion:
+        if not mirando_abajo and not en_calibracion:                                # Guarda historial de ojos cerrados para cálculo de PERCLOS.
             historial_estado_ojos.append(1 if ojos_cerrados else 0)
 
-        # Bostezo
-        if mar > UMBRAL_MAR_BOSTEZO:
+        # --------------------------------------------------------------------
+        # Deteccion de Bostezos
+        # --------------------------------------------------------------------
+                
+        if mar > UMBRAL_MAR_BOSTEZO:                                                # Detecta si la apertura de boca supera el umbral MAR.                
             frames_boca_abierta += 1
-        else:
+        else:                                                                       # Se verifica que la duración corresponde a un bostezo válido.    
             if frames_boca_abierta >= FRAMES_MIN_BOSTEZO:
                 contador_bostezos += 1
             frames_boca_abierta = 0
 
-        if len(historial_estado_ojos) > 0:
+        # --------------------------------------------------------------------
+        # Cálculo de PERCLOS
+        # --------------------------------------------------------------------
+
+        if len(historial_estado_ojos) > 0:                                          # Calcula el porcentaje de tiempo con ojos cerrados.        
             perclos = sum(historial_estado_ojos) / len(historial_estado_ojos)
         else:
             perclos = 0.0
 
-        while tiempos_parpadeos and ahora - tiempos_parpadeos[0] > VENTANA_PARPADEOS_SEG:
+        # --------------------------------------------------------------------
+        # Parpadeos por minuto
+        # --------------------------------------------------------------------
+        
+        while tiempos_parpadeos and ahora - tiempos_parpadeos[0] > VENTANA_PARPADEOS_SEG:       # Elimina parpadeos antiguos fuera de la ventana de tiempo.
             tiempos_parpadeos.popleft()
 
         parpadeos_por_minuto = len(tiempos_parpadeos)
 
-        # Guardar datos
+        # --------------------------------------------------------------------
+        # GUARDADO DE DATOS EN CSV
+        # --------------------------------------------------------------------
+        
+        #En este apartado se guarda los dator periódicamente para entrenar la IA.
+        
         if not en_calibracion and ahora - tiempo_ultimo_guardado >= INTERVALO_GUARDADO_SEG:
             escritor_csv.writerow([
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
@@ -412,8 +431,12 @@ while True:
             archivo_csv.flush()
             tiempo_ultimo_guardado = ahora
 
-        # Dibujos
-        for p in puntos_izq + puntos_der:
+        # --------------------------------------------------------------------
+        # DIBUJO DE LANDMARKS FACIALES
+        # --------------------------------------------------------------------
+
+        # En este apartado se dibujan los principales apartados del ojos, boca y rostro. Ademas se dibujan los puntos guias para la orientacion facial.
+        for p in puntos_izq + puntos_der:                                       
             cv2.circle(imagen, p, 2, (0, 255, 0), -1)
 
         for p in puntos_boca:
@@ -432,6 +455,10 @@ while True:
         cv2.line(imagen, punto_lat_izq, punto_lat_der, (255, 255, 255), 1)
 
         estado_cabeceo = "sostenida" if cabeza_abajo_sostenida else "normal"
+        
+        # --------------------------------------------------------------------
+        # Panel visual
+        # --------------------------------------------------------------------
 
         dibujar_panel(imagen, [
             ("Sesion", TIPO_SESION, (255, 255, 255)),
@@ -446,7 +473,11 @@ while True:
             ("Microsuenos", str(contador_microsuenos), (0, 100, 255)),
             ("PERCLOS", f"{perclos * 100:5.1f} %", (255, 100, 100)),
         ])
-
+        
+    # --------------------------------------------------------------------
+    # SI NO SE DETECTA ROSTRO
+    # --------------------------------------------------------------------
+    
     else:
         cv2.putText(
             imagen,
@@ -457,10 +488,14 @@ while True:
             (0, 0, 255),
             2
         )
+        
+    # --------------------------------------------------------------------
+    # VISUALIZACIÓN Y CONTROL DE TECLAS
+    # --------------------------------------------------------------------
 
-    cv2.imshow("Recolector de Datos - Proyecto Integrador", imagen)
+    cv2.imshow("Recolector de Datos - Proyecto Integrador", imagen)                 # Muestra la ventana
 
-    tecla = cv2.waitKey(1) & 0xFF
+    tecla = cv2.waitKey(1) & 0xFF                                                   # Lee tecla
 
     if tecla == 27:
         break
@@ -471,6 +506,10 @@ while True:
         cabeza_abajo_sostenida = False
         tiempo_inicio_cabeza_abajo = None
         print("Recalibrando... mire al frente con ojos abiertos")
+
+# --------------------------------------------------------------------
+# CIERRE DEL PROGRAMA
+# --------------------------------------------------------------------
 
 archivo_csv.close()
 camara.release()
