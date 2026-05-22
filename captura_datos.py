@@ -1,41 +1,39 @@
-import cv2
-import mediapipe as mp
-import numpy as np
-import time
-import csv
-import os
-import math
-from datetime import datetime
-from collections import deque
+import cv2                                                             # Permite usar la cámara, procesar imágenes y mostrar resultados en pantalla.                                
+import mediapipe as mp                                                 # Detecta puntos faciales del rostro.
+import numpy as np                                                     # Permite realizar cálculos numéricos y trabajar con arreglos de datos.
+import time                                                            # Permite medir tiempos, intervalos y duración de eventos.        
+import csv                                                             # Permite guardar dato en .csv.
+import os                                                              # Permite crear carpetas y manejar rutas del sistema.
+import math                                                            # Operaciones matemáticas. 
+from datetime import datetime                                          # Permite registrar fecha y hora.
+from collections import deque                                          # Almacena datos recientes en ventanas temporales, (PERCLOS y parpadeos).
 
-# =====================================================
+# --------------------------------------------------------------------
 # CAMBIA ESTO ANTES DE CADA GRABACIÓN
-# =====================================================
+# --------------------------------------------------------------------
 
-TIPO_SESION = "concentrado"
-# Opciones: "normal", "cansado", "distraido", "concentrado", "bostezo"
+TIPO_SESION = "concentrado"                                            # Opciones: "normal", "cansado", "distraido", "concentrado", "bostezo"
+ID_SESION = datetime.now().strftime("%Y%m%d_%H%M%S")                   # Fecha
 
-ID_SESION = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-# =====================================================
+# --------------------------------------------------------------------
 # MEDIAPIPE
-# =====================================================
+# --------------------------------------------------------------------
 
 malla_rostro = mp.solutions.face_mesh.FaceMesh(
-    max_num_faces=1,
-    refine_landmarks=True,
-    min_detection_confidence=0.5,
-    min_tracking_confidence=0.5,
+    max_num_faces               = 1,                                   # Detección número de rostros
+    refine_landmarks            = True,                                # Activar puntos más precisos
+    min_detection_confidence    = 0.5,                                 # Confianza para detectar rostro.
+    min_tracking_confidence     = 0.5,                                 # Confianza para seguir el rostro entre frames
 )
 
-# Ojos
+# Números correspondientes a puntos especificos del modelo FaceMesh
+
 PUNTOS_OJO_IZQ = [33, 160, 158, 133, 153, 144]
 PUNTOS_OJO_DER = [362, 385, 387, 263, 373, 380]
-
-# Boca
 PUNTOS_BOCA = [13, 14, 78, 308]
 
-# Rostro / cabeza
+# Puntos aproximados de cada parte de rostro
+
 INDICE_NARIZ = 1
 INDICE_FRENTE = 10
 INDICE_MENTON = 152
@@ -44,92 +42,87 @@ INDICE_IRIS_DER = 473
 INDICE_LATERAL_IZQ = 234
 INDICE_LATERAL_DER = 454
 
-# =====================================================
-# PARÁMETROS
-# =====================================================
+# --------------------------------------------------------------------
+# PARÁMETROS DE CALIBRACIÓN
+# --------------------------------------------------------------------
 
-FRAMES_CALIBRACION = 60
-FACTOR_UMBRAL_EAR = 0.78
+# 60 freames aprox 2s
 
-UMBRAL_MAR_BOSTEZO = 0.6
-FRAMES_MIN_BOSTEZO = 15
+FRAMES_CALIBRACION = 60                                                # Cantidad frames usados para calibrar el programa al inicio (Mirar al frente)
+FACTOR_UMBRAL_EAR = 0.78                                               # "Eye Aspect Ratio" Mide que tan abierto esta el ojo se mutiplica con mi EAR calibrado
 
-FRAMES_MIN_PARPADEO = 2
-FRAMES_MAX_PARPADEO = 7
-FRAMES_MICROSUENO = 15
+UMBRAL_MAR_BOSTEZO = 0.6                                               # Umbral apertura boca para posible bostezo
+FRAMES_MIN_BOSTEZO = 15                                                # Frames mínimos con boca abierta para validar bostezo
 
-VENTANA_PERCLOS_FRAMES = 150
-VENTANA_PARPADEOS_SEG = 60
-INTERVALO_GUARDADO_SEG = 0.5
+FRAMES_MIN_PARPADEO = 2                                                # Frames min. ojos cerrados para contar un parpadeo
+FRAMES_MAX_PARPADEO = 7                                                # Frames máx. para seguir considerando que fue parpadeo normal.
+FRAMES_MICROSUENO = 15                                                 # Frames con ojos cerrados para detetar posible m
 
-# Sensibilidad del movimiento de cabeza
-UMBRAL_CABEZA_X = 0.10
-UMBRAL_CABEZA_Y = 0.10
+VENTANA_PERCLOS_FRAMES = 150                                           # Frames usada para calcilar PERCLOS
+VENTANA_PARPADEOS_SEG = 60                                             # Tiempo usado para calcular parpadeos x min
+INTERVALO_GUARDADO_SEG = 0.5                                           # Intervalo de tiempo para guardar los datos en el csv
+
+UMBRAL_CABEZA_X = 0.10                                                 # Sensibilidad movimiento cabeza <-->                           
+UMBRAL_CABEZA_Y = 0.10                                                 # Sensibilidad movimiento cabeza ↑↓
 
 # Conteo de cabeceos
-TIEMPO_MIN_CABECE0 = 0.30      # debe estar abajo al menos 0.30 s
-TIEMPO_MAX_CABECE0 = 3.00      # si dura más, se considera cabeza abajo sostenida
-TIEMPO_MIN_ENTRE_CABECEOS = 1.00  # evita contar varios seguidos
+TIEMPO_MIN_CABECE0 = 0.30                                              # Debe estar abajo al menos 0.30 s
+TIEMPO_MAX_CABECE0 = 3.00                                              # Si dura más, se considera cabeza abajo sostenida
+TIEMPO_MIN_ENTRE_CABECEOS = 1.00                                       # Tiempo para evitar contar varios seguidos
 
-RUTA_CSV = "datos/datos_fatiga.csv"
+RUTA_CSV = "datos/datos_fatiga.csv"                                    # Ruta de guardado
 
-# =====================================================
+# --------------------------------------------------------------------
 # FUNCIONES
-# =====================================================
+# --------------------------------------------------------------------
 
-def distancia(p1, p2):
-    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+def distancia(p1, p2):                                                 # Distancia euclidiana entre dos puntos         
+    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)      # Formula distacia entre dos puntos sqrt((x2-x1))
 
-
-def calcular_ear(puntos_ojo):
-    vertical_1 = distancia(puntos_ojo[1], puntos_ojo[5])
+def calcular_ear(puntos_ojo):                                          # EAR (Eye aspect Ratio): mide la apertura del ojo
+    vertical_1 = distancia(puntos_ojo[1], puntos_ojo[5])               # Valores bajos indican que el ojo está cerrado
     vertical_2 = distancia(puntos_ojo[2], puntos_ojo[4])
     horizontal = distancia(puntos_ojo[0], puntos_ojo[3])
     return (vertical_1 + vertical_2) / (2.0 * horizontal)
 
-
-def calcular_mar(puntos_boca):
-    altura = distancia(puntos_boca[0], puntos_boca[1])
+def calcular_mar(puntos_boca):                                         # MAR (Mouth Aspet Ratio): mide apertura boca.
+    altura = distancia(puntos_boca[0], puntos_boca[1])                 # Valores altos pueden indicar bostezo
     ancho = distancia(puntos_boca[2], puntos_boca[3])
     return altura / ancho
 
-
-def obtener_punto(rostro, indice, ancho_img, alto_img):
-    return (
-        int(rostro.landmark[indice].x * ancho_img),
+def obtener_punto(rostro, indice, ancho_img, alto_img):                # De coordenadas a pixeles un punto normalizado (0 a 1) mediapipe
+    return (                                                           # Multiplica el normalizado por el ancho y alto
+        int(rostro.landmark[indice].x * ancho_img),                     
         int(rostro.landmark[indice].y * alto_img)
     )
 
-
-def obtener_puntos(rostro, indices, ancho_img, alto_img):
+def obtener_puntos(rostro, indices, ancho_img, alto_img):              #   # Convierte varios índices de landmarks a coordenadas en pixeles.
     return [obtener_punto(rostro, i, ancho_img, alto_img) for i in indices]
 
-
 def calcular_posicion_cabeza(punto_nariz, punto_izq, punto_der, punto_frente, punto_menton):
-    centro_x = (punto_izq[0] + punto_der[0]) / 2
+    centro_x = (punto_izq[0] + punto_der[0]) / 2                       # Calcula posición relativa de la nariz respecto al centro del rostro y permite estimar si se mueve arriba, abajo, izquierda o derecha.       
     centro_y = (punto_frente[1] + punto_menton[1]) / 2
 
     ancho_rostro = distancia(punto_izq, punto_der)
     alto_rostro = distancia(punto_frente, punto_menton)
 
-    if ancho_rostro == 0 or alto_rostro == 0:
+    if ancho_rostro == 0 or alto_rostro == 0:                          # Evita división para cero si los puntos no se detectan de manera correcta.      
         return 0, 0
 
-    pos_x = (punto_nariz[0] - centro_x) / ancho_rostro
+    pos_x = (punto_nariz[0] - centro_x) / ancho_rostro                 # Posición normalizada de la nariz respecto al centro del rostro     
     pos_y = (punto_nariz[1] - centro_y) / alto_rostro
 
     return pos_x, pos_y
 
-
-def dibujar_panel(imagen, datos):
+def dibujar_panel(imagen, datos):                                      # Se dibuja un panel en la imagen y se muestran metrical que se calculan en tiempo real.     
     x, y, ancho_panel = 10, 10, 390
     alto_panel = 25 * len(datos) + 15
 
     capa = imagen.copy()
-    cv2.rectangle(capa, (x, y), (x + ancho_panel, y + alto_panel), (0, 0, 0), -1)
-    cv2.addWeighted(capa, 0.55, imagen, 0.45, 0, imagen)
+    cv2.rectangle(capa, (x, y), (x + ancho_panel, y + alto_panel), (0, 0, 0), -1)           # Rectángulo negro del panel.
+    cv2.addWeighted(capa, 0.55, imagen, 0.45, 0, imagen)               # Mezcla el panel con la imagen para hacerlo semitransparente.
 
-    for i, (etiqueta, valor, color) in enumerate(datos):
+    for i, (etiqueta, valor, color) in enumerate(datos):               # Ponemos los datos dentro del panel 
         cv2.putText(
             imagen,
             f"{etiqueta}: {valor}",
@@ -141,71 +134,77 @@ def dibujar_panel(imagen, datos):
             cv2.LINE_AA
         )
 
-# =====================================================
+# --------------------------------------------------------------------
 # CSV
-# =====================================================
+# --------------------------------------------------------------------
 
-os.makedirs(os.path.dirname(RUTA_CSV), exist_ok=True)
+os.makedirs(os.path.dirname(RUTA_CSV), exist_ok=True)                      
 
-archivo_existe = os.path.isfile(RUTA_CSV)
-archivo_csv = open(RUTA_CSV, mode="a", newline="", encoding="utf-8")
-escritor_csv = csv.writer(archivo_csv)
+archivo_existe = os.path.isfile(RUTA_CSV)                              # Verifica si el archivo CSV ya existe.     
+archivo_csv = open(RUTA_CSV, mode="a", newline="", encoding="utf-8")   # Abre el archivo CSV en modo agregar.
+escritor_csv = csv.writer(archivo_csv)                                 # Si el archivo ya tiene datos, los nuevos registros se añadirán al final.
 
-if not archivo_existe:
+if not archivo_existe:                                                 # Crea la carpeta donde se guardan los datos si todavía no existe.     
     escritor_csv.writerow([
-        "fecha_hora",
-        "id_sesion",
-        "tipo_sesion",
-        "ear",
-        "mar",
-        "estado_cabeza",
-        "mirando_abajo",
-        "parpadeos_total",
-        "parpadeos_por_minuto",
-        "cabeceos_total",
-        "cabeza_abajo_sostenida",
-        "bostezos",
-        "microsuenos",
-        "perclos"
+        "fecha_hora",                                                  # Fecha y hora del registro.
+        "id_sesion",                                                   # Identificador único de cada sesión.
+        "tipo_sesion",                                                 # Etiqueta definida por el usuario.
+        "ear",                                                         # Apertura ojo.
+        "mar",                                                         # Apertura boca.
+        "estado_cabeza",                                               # Posición estimada de la cabeza.
+        "mirando_abajo",                                               # Indica si la cabeza está abajo.
+        "parpadeos_total",                                             # Total parpadeos acumulados.
+        "parpadeos_por_minuto",                                        # Tasa parpadeos por minuto.
+        "cabeceos_total",                                              # Total cabeceos detectados.
+        "cabeza_abajo_sostenida",                                      # Indica si la cabeza permaneció abajo demasiado tiempo.
+        "bostezos",                                                    # Total bostezos detectados.
+        "microsuenos",                                                 # Total microsueños detectados.
+        "perclos"                                                      # Porcentaje de tiempo con ojos cerrados.
     ])
 
-# =====================================================
+# --------------------------------------------------------------------
 # VARIABLES DE ESTADO
-# =====================================================
+# --------------------------------------------------------------------
 
-frames_ojos_cerrados = 0
-frames_boca_abierta = 0
+# Contadores temporales de frames consecutivos.
+frames_ojos_cerrados = 0                                               # Cuenta cuantos frames seguidos los ojos permanecen cerrados.                     
+frames_boca_abierta = 0                                                # Cuenta cuantos frames seguidos la boca permanece abierta.
 
-contador_parpadeos = 0
-contador_bostezos = 0
-contador_microsuenos = 0
-contador_cabeceos = 0
+# Contadores generales acumulados durante la sesión.
+contador_parpadeos = 0                                                 # Total parpadeos detectados        
+contador_bostezos = 0                                                  # Total bostezos detectados
+contador_microsuenos = 0                                               # Total microsueños detectados
+contador_cabeceos = 0                                                  # Total de cabeceos
 
-tiempo_ultimo_guardado = 0.0
+tiempo_ultimo_guardado = 0.0                                           # Controla el tiempo de guardado de datos
 
 # Estado para detectar cabeceo real
-cabeza_estaba_abajo = False
-tiempo_inicio_cabeza_abajo = None
-tiempo_ultimo_cabeceo = 0.0
-cabeza_abajo_sostenida = False
+cabeza_estaba_abajo = False                                            # Indica si la cabeza estaba abajo en el frame anterior.
+tiempo_inicio_cabeza_abajo = None                                      # Guarda el instante en que la cabeza comenzó a bajar.
+tiempo_ultimo_cabeceo = 0.0                                            # Guarda el tiempo del último cabeceo detectado.
+cabeza_abajo_sostenida = False                                         # Detecta si la cabeza permanece abajo demasiado tiempo.
 
-# Calibración
-muestras_calibracion = []
-en_calibracion = True
-umbral_ear_personal = 0.21
-base_cabeza_x = 0.0
-base_cabeza_y = 0.0
+# Durante la calibración inicial el usuario debe mirar al frente con los ojos abiertos para obtener valores base personalizados.
+muestras_calibracion = []                                              # Guarda muestras temporales
+en_calibracion = True                                                  # Indicador de que se sigue calibrando
+umbral_ear_personal = 0.21                                             # Umbral EAR personalizado inicial.
+base_cabeza_x = 0.0                                                    # Posición horizontal base de la cabeza.
+base_cabeza_y = 0.0                                                    # Posición vertical base de la cabeza.
 
-# Historiales
-historial_ear = deque(maxlen=5)
+# Estas estructuras almacenan datos recientes para calcular métricas dinámicas como PERCLOS y parpadeos por minuto.
+historial_ear = deque(maxlen=5)                                        # Guarda últimos valores EAR para suavizar ruuido
 historial_estado_ojos = deque(maxlen=VENTANA_PERCLOS_FRAMES)
 tiempos_parpadeos = deque()
 
-# =====================================================
+# --------------------------------------------------------------------
 # BUCLE PRINCIPAL
-# =====================================================
+# --------------------------------------------------------------------
 
-camara = cv2.VideoCapture(0)
+# Se abre la camara e indica que si la camara esta en linea, muestra mensajes de error, invierte la imagen horizontalmente.
+# Se obtiene el alto y ancho de la imagen, convierte la imagen de BGR a RGB para mediapipe.
+# Procesa la imagen y detecta las landmarks faciales, verifica la deteccion de almenos un rostro, toma el primer rostro detectado.
+
+camara = cv2.VideoCapture(0)                                           
 
 print(f"Iniciando sesión: {TIPO_SESION} | ID: {ID_SESION}")
 print("Presiona ESC para salir. Presiona R para recalibrar.")
@@ -225,6 +224,10 @@ while True:
 
     if resultados.multi_face_landmarks:
         rostro = resultados.multi_face_landmarks[0]
+        
+        #-------------------------------------------------------------
+        # Extracción de puntos faciales
+        #-------------------------------------------------------------
 
         puntos_izq = obtener_puntos(rostro, PUNTOS_OJO_IZQ, ancho_img, alto_img)
         puntos_der = obtener_puntos(rostro, PUNTOS_OJO_DER, ancho_img, alto_img)
@@ -238,6 +241,13 @@ while True:
         punto_iris_izq = obtener_punto(rostro, INDICE_IRIS_IZQ, ancho_img, alto_img)
         punto_iris_der = obtener_punto(rostro, INDICE_IRIS_DER, ancho_img, alto_img)
 
+        #-------------------------------------------------------------
+        # Cálculo de métricas faciales
+        #-------------------------------------------------------------
+        
+        # Se calcula el EAR promedio de ambos ojos, y guardamos el EAR reciente para suavisar el ruido, promediamos los valores.
+        # Se calcula el MAR para medir la apertura de la boca y calculamos la posición relativa de la cabeza.
+        
         ear_actual = (calcular_ear(puntos_izq) + calcular_ear(puntos_der)) / 2.0
         historial_ear.append(ear_actual)
         ear = sum(historial_ear) / len(historial_ear)
@@ -251,6 +261,14 @@ while True:
             punto_frente,
             punto_menton
         )
+
+        #-------------------------------------------------------------
+        # Calibración inicial
+        #-------------------------------------------------------------
+        
+        # Inicialmente verifica si el sistema esta en calibración, se guarda las muestras de ojos y cabeza.
+        # Esperamos a completar la calibración, extraemos valores del EAR, posiciones X, Y de la cabeza.
+        # Calculamos el umbral personalizado de ojo cerrado, se calcula la posición base horizontal y vertical de la cabeza.
 
         if en_calibracion:
             muestras_calibracion.append((ear, cabeza_x, cabeza_y))
@@ -268,7 +286,7 @@ while True:
 
             cv2.putText(
                 imagen,
-                "CALIBRANDO... mire al frente con ojos abiertos",
+                "CALIBRANDO... mire al frente con ojos abiertos",      # Mensaje de calibración.                                             
                 (20, alto_img - 80),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
@@ -276,11 +294,17 @@ while True:
                 2
             )
 
-        dif_x = cabeza_x - base_cabeza_x
-        dif_y = cabeza_y - base_cabeza_y
+        #-------------------------------------------------------------
+        # Detección posición de la cabeza
+        #-------------------------------------------------------------
+        
+        # 
+
+        dif_x = cabeza_x - base_cabeza_x                               # Diferencia x respecto a la calibración 
+        dif_y = cabeza_y - base_cabeza_y                               # Diferencia y respecto a la calibración 
 
         if en_calibracion:
-            estado_cabeza = "calibrando"
+            estado_cabeza = "calibrando"                               # Mientras calibra no clasifica-
         else:
             if dif_y > UMBRAL_CABEZA_Y:
                 estado_cabeza = "abajo"
@@ -295,10 +319,14 @@ while True:
 
         mirando_abajo = estado_cabeza == "abajo"
 
-        # =====================================================
+        # --------------------------------------------------------------------
         # CABECEO REAL: solo cuenta si baja y vuelve al frente
-        # =====================================================
+        # --------------------------------------------------------------------
 
+        # Obtiene el tiempo actual, reinicia el estado de cabeza abajo sostenida, solo detecta cabeceos cuando terminó la calibración.
+        # Se marca y guarda el instante en que se bajó la cabeza. También se calcula el tiempo de agachado con la cabeza.
+        # Si dura mucho tiempo abajo, no se considera cabeceo, se calcula el tiempo, cuenta y guarda el cabeceo válido, reinicia y liempia el estado y tiempo de inicio.
+            
         ahora = time.time()
         cabeza_abajo_sostenida = False
 
