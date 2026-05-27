@@ -70,7 +70,7 @@ TIEMPO_MIN_CABECE0 = 0.30                                              # Debe es
 TIEMPO_MAX_CABECE0 = 3.00                                              # Si dura más, se considera cabeza abajo sostenida
 TIEMPO_MIN_ENTRE_CABECEOS = 1.00                                       # Tiempo para evitar contar varios seguidos
 
-RUTA_CSV = "datos/datos_fatiga.csv"                                    # Ruta de guardado
+RUTA_CSV = "data/raw/datos_fatiga.csv"                                    # Ruta de guardado
 
 # --------------------------------------------------------------------
 # FUNCIONES
@@ -297,9 +297,7 @@ while True:
         #-------------------------------------------------------------
         # Detección posición de la cabeza
         #-------------------------------------------------------------
-        
-        # 
-
+                
         dif_x = cabeza_x - base_cabeza_x                               # Diferencia x respecto a la calibración 
         dif_y = cabeza_y - base_cabeza_y                               # Diferencia y respecto a la calibración 
 

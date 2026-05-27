@@ -16,9 +16,9 @@ from collections import deque, Counter                       # Guarda historiale
 # CARGAR MODELO ENTRENADO
 # -----------------------------------------------------
 
-BASE_DIR = Path(__file__).resolve().parent                   # Obtiene la carpeta donde está este archivo.
-modelo = joblib.load(BASE_DIR / "modelo_fatiga.pkl")         # Carga el modelo entrenado previamente en el notebook.
-columnas_modelo = joblib.load(BASE_DIR / "columnas.pkl")     # Carga las columnas usadas durante el entrenamiento.
+BASE_DIR = Path(__file__).resolve().parent.parent                   # Obtiene la carpeta donde está este archivo.
+modelo = joblib.load(BASE_DIR / "models" / "modelo_fatiga.pkl")         # Carga el modelo entrenado previamente en el notebook.
+columnas_modelo = joblib.load(BASE_DIR / "models" / "columnas.pkl")     # Carga las columnas usadas durante el entrenamiento.
 
 # -----------------------------------------------------
 # CONFIGURACIÓN DE MEDIAPIPE
