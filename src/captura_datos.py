@@ -9,10 +9,10 @@ from datetime import datetime                                          # Permite
 from collections import deque                                          # Almacena datos recientes en ventanas temporales, (PERCLOS y parpadeos).
 
 # --------------------------------------------------------------------
-# CAMBIA ESTO ANTES DE CADA GRABACIÓN
+# CAMBIAR ESTO ANTES DE CADA GRABACIÓN
 # --------------------------------------------------------------------
 
-TIPO_SESION = "concentrado"                                            # Opciones: "normal", "cansado", "distraido", "concentrado", "bostezo"
+TIPO_SESION = "concentrado"                                            # Opciones: "normal", "cansado", "distraido", "concentrado", "bostezo", agregar mas en caso de requerir más variedadd de datos
 ID_SESION = datetime.now().strftime("%Y%m%d_%H%M%S")                   # Fecha
 
 # --------------------------------------------------------------------
