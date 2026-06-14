@@ -59,7 +59,7 @@ FACTOR_UMBRAL_EAR = 0.78                                     # Factor para defin
 FRAMES_MIN_PARPADEO = 2                                      # Mínimo de frames para contar un parpadeo.
 FRAMES_MAX_PARPADEO = 7                                      # Máximo de frames para que siga siendo parpadeo.
 
-FRAMES_MICROSUENO = 45                                       # Frames necesarios para detectar posible microsueño.
+FRAMES_MICROSUENO = 30                                       # Frames necesarios para detectar posible microsueño.
 
 UMBRAL_MAR_BOSTEZO = 0.6                                     # Umbral de apertura de boca para detectar bostezo.
 FRAMES_MIN_BOSTEZO = 15                                      # Frames mínimos con boca abierta para validar bostezo.
@@ -68,12 +68,12 @@ VENTANA_EVENTOS_SEG = 60                                     # Ventana de 60 seg
 VENTANA_PERCLOS_SEG = 30                                     # Ventana usada para calcular PERCLOS.
 
 UMBRAL_CABEZA_X = 0.10                                       # Sensibilidad para cabeza izquierda/derecha.
-UMBRAL_CABEZA_Y = 0.05                                       # Sensibilidad para cabeza arriba/abajo.
+UMBRAL_CABEZA_Y = 0.06                                       # Sensibilidad para cabeza arriba/abajo.
 
-TIEMPO_MIN_CABECEO = 0.3                                     # Tiempo mínimo para considerar inicio de cabeceo.
+TIEMPO_MIN_CABECEO = 0.1                                     # Tiempo mínimo para considerar inicio de cabeceo.
 TIEMPO_MAX_CABECEO = 3.00                                    # Si dura más, ya no se considera cabeceo normal.
-TIEMPO_MIN_ENTRE_CABECEOS = 0.3                             # Evita contar varios cabeceos muy seguidos.
-VELOCIDAD_MIN_CAIDA = 0.02                                   # Velocidad mínima de caída de cabeza.
+TIEMPO_MIN_ENTRE_CABECEOS = 0.60                             # Evita contar varios cabeceos muy seguidos.
+VELOCIDAD_MIN_CAIDA = 0.08                                   # Velocidad mínima de caída de cabeza.
 FACTOR_EAR_CABECEO = 0.92                                    # Verifica si los ojos se cerraron durante el cabeceo.
 
 VENTANA_PREDICCION = 30                                      # Cantidad de predicciones usadas para suavizar el resultado.
@@ -276,6 +276,26 @@ def color_estado(estado):                                    # Define color seg�
 
     else:
         return (255,255,255)
+
+def dibujar_panel(imagen, datos):                                      # Se dibuja un panel en la imagen y se muestran metrical que se calculan en tiempo real.     
+    x, y, ancho_panel = 10, 10, 390
+    alto_panel = 25 * len(datos) + 15
+
+    capa = imagen.copy()
+    cv2.rectangle(capa, (x, y), (x + ancho_panel, y + alto_panel), (0, 0, 0), -1)           # Rectángulo negro del panel.
+    cv2.addWeighted(capa, 0.55, imagen, 0.45, 0, imagen)               # Mezcla el panel con la imagen para hacerlo semitransparente.
+
+    for i, (etiqueta, valor, color) in enumerate(datos):               # Ponemos los datos dentro del panel 
+        cv2.putText(
+            imagen,
+            f"{etiqueta}: {valor}",
+            (x + 10, y + 25 + i * 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            color,
+            1,
+            cv2.LINE_AA
+        )
 
 
 # -----------------------------------------------------
@@ -556,29 +576,25 @@ while True:
 
         color = color_estado(estado_predicho)                                                       # Color según el estado predicho
 
-        cv2.putText(imagen, f"ESTADO IA: {estado_predicho.upper()}", (30, 45),                      # Texto grande con el estado de la IA
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
+        datos_panel = [                                                                             # Construimos las filas del panel con las mismas métricas
+            ("Estado IA", estado_predicho.upper(), color),                                          # Estado predicho por la IA
+        ]
 
         if not en_calibracion:                                                                      # Mostramos la confianza solo si ya terminó de calibrar
-            cv2.putText(imagen, f"Confianza: {confianza:.1f}%", (30, 85),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            datos_panel.append(("Confianza", f"{confianza:.1f} %", color))
 
-        cv2.putText(imagen, f"EAR: {ear:.2f} (u {umbral_ear_personal:.2f})", (30, 125),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)
-        cv2.putText(imagen, f"MAR: {mar:.2f}", (30, 155),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 0), 2)
-        cv2.putText(imagen, f"Cabeza: {estado_cabeza}", (30, 185),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 200, 100), 2)
-        cv2.putText(imagen, f"Parp/min: {parpadeos_por_minuto}", (30, 215),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 0), 2)
-        cv2.putText(imagen, f"Cabeceos/min: {cabeceos_por_minuto}", (30, 245),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 200, 100), 2)
-        cv2.putText(imagen, f"Bostezos/min: {bostezos_por_minuto}", (30, 275),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 0, 255), 2)
-        cv2.putText(imagen, f"Microsuenos/min: {microsuenos_por_minuto}", (30, 305),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 100, 255), 2)
-        cv2.putText(imagen, f"PERCLOS: {perclos * 100:.1f}%", (30, 335),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 100, 100), 2)
+        datos_panel += [
+            ("EAR", f"{ear:.2f}  (umbral {umbral_ear_personal:.2f})", (0, 255, 0)),
+            ("MAR", f"{mar:.2f}", (255, 255, 0)),
+            ("Cabeza", estado_cabeza, (255, 200, 100)),
+            ("Parpadeos/min", str(parpadeos_por_minuto), (255, 255, 0)),
+            ("Cabeceos/min", str(cabeceos_por_minuto), (255, 200, 100)),
+            ("Bostezos/min", str(bostezos_por_minuto), (255, 0, 255)),
+            ("Microsuenos/min", str(microsuenos_por_minuto), (0, 100, 255)),
+            ("PERCLOS", f"{perclos * 100:5.1f} %", (255, 100, 100)),
+        ]
+
+        dibujar_panel(imagen, datos_panel)                                                          # Dibuja el panel semitransparente con todas las métricas
         
     # --------------------------------------------------------------------
     # SI NO SE DETECTA ROSTRO

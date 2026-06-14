@@ -12,7 +12,7 @@ from collections import deque                                          # Almacen
 # CAMBIAR ESTO ANTES DE CADA GRABACIÓN
 # --------------------------------------------------------------------
 
-TIPO_SESION = "concentrado"                                            # Opciones: "normal", "cansado", "distraido", "concentrado", "bostezo", agregar mas en caso de requerir más variedadd de datos
+TIPO_SESION = "normal"                                            # Opciones: "normal", "cansado", "distraido", "concentrado", "bostezo", agregar mas en caso de requerir más variedadd de datos
 ID_SESION = datetime.now().strftime("%Y%m%d_%H%M%S")                   # Fecha
 
 # --------------------------------------------------------------------
