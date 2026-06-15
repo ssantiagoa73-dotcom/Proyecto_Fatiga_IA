@@ -78,7 +78,7 @@ Guardar cambios en GitHub:
 
 ```bash
 git add .
-git commit -m "Actualización del proyecto"
+git commit -m "Actualización descripción"
 git push
 ```
 

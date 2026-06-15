@@ -124,7 +124,7 @@ def obtener_punto(rostro, indice, ancho, alto):              # Convierte un punt
         int(rostro.landmark[indice].y * alto)
     )
 
-def obtener_puntos(rostro, indices, ancho, alto):            # Convierte varios puntos del rostro a coordenadas reales en pixeles.
+def obtener_puntos(rostro, indices, ancho, alto):            # Convierte varios puntos del rostro a coordenadas reales en pixels.
     return [obtener_punto(rostro, i, ancho, alto)
             for i in indices]
 
